@@ -9,7 +9,7 @@
         <header class="console-header">
           <div class="logo">
             <h1>PIXEL<span>BOX</span></h1>
-            <div class="status-indicator"><span class="blink">●</span> V3_KEYBOARD_DRIVEN</div>
+            <div class="status-indicator"><span class="blink">●</span> V3_RESPONSIVE</div>
           </div>
           <div class="system-clock">{{ currentTime }}</div>
         </header>
@@ -28,9 +28,11 @@
                 @click="selectGame(game)"
               >
                 <div class="game-icon">{{ game.icon }}</div>
-                <div class="game-title">{{ game.name }}</div>
-                <div class="game-stats" v-if="highScores[game.id]">🏆 BEST: {{ highScores[game.id] }}</div>
-                <div class="game-hint" v-if="state.selectedIndex === index">[ PRESS ENTER ]</div>
+                <div class="game-info">
+                  <div class="game-title">{{ game.name }}</div>
+                  <div class="game-stats" v-if="highScores[game.id]">🏆 {{ highScores[game.id] }}</div>
+                </div>
+                <div class="game-hint" v-if="state.selectedIndex === index">ENTER</div>
               </div>
             </div>
 
@@ -43,7 +45,7 @@
         <footer class="console-footer">
           <div class="footer-content">
             <div class="shortcuts">
-              <span class="neon-pink">NAV: SETAS</span> | [ENTER] SELECIONAR | [ESC] VOLTAR | [L] LOCK
+              <span class="neon-pink">SETAS</span> | [ENTER] OK | [ESC] SAIR | [L] LOCK
             </div>
           </div>
         </footer>
@@ -53,11 +55,10 @@
 </template>
 
 <script setup>
-import { ref, reactive, markRaw, onMounted, onUnmounted, computed } from 'vue';
+import { ref, reactive, markRaw, onMounted, onUnmounted } from 'vue';
 import { getScores, saveScore } from './utils/storage';
 import { fx } from './utils/sounds';
 
-// Imports de Componentes e Jogos
 import Dashboard from './components/Dashboard.vue';
 import PanicScreen from './components/PanicScreen.vue';
 import WindowsUpdate from './components/WindowsUpdate.vue';
@@ -79,65 +80,35 @@ const state = reactive({
 });
 
 const games = [
-  { id: 'snake', name: 'SNAKE_PRO', icon: '🐍', component: markRaw(SnakeGame) },
-  { id: 'tetris', name: 'BLOCK_FIT', icon: '🧱', component: markRaw(TetrisGame) },
-  { id: 'work', name: 'WORK_QUEST', icon: '👨‍💻', component: markRaw(WorkQuest) },
-  { id: 'space', name: 'VOID_INVADERS', icon: '👾', component: markRaw(SpaceInvaders) },
-  { id: 'racer', name: 'PIXEL_RACER', icon: '🏎️', component: markRaw(PixelRacer) },
-  { id: 'jump', name: 'CYBER_JUMP', icon: '🚀', component: markRaw(CyberJump) }
+  { id: 'snake', name: 'SNAKE', icon: '🐍', component: markRaw(SnakeGame) },
+  { id: 'tetris', name: 'TETRIS', icon: '🧱', component: markRaw(TetrisGame) },
+  { id: 'work', name: 'WORK', icon: '👨‍💻', component: markRaw(WorkQuest) },
+  { id: 'space', name: 'SPACE', icon: '👾', component: markRaw(SpaceInvaders) },
+  { id: 'racer', name: 'RACER', icon: '🏎️', component: markRaw(PixelRacer) },
+  { id: 'jump', name: 'JUMP', icon: '🚀', component: markRaw(CyberJump) }
 ];
 
-const activeGameName = computed(() => {
-  return games.find(g => g.component === state.currentGame)?.name || '';
-});
-
-const selectGame = (game) => {
-  state.currentGame = game.component;
-  fx.shoot();
-};
-
-const exitGame = () => {
-  state.currentGame = null;
-  highScores.value = getScores();
-};
-
-const handleSaveScore = (d) => {
-  saveScore(d.gameId, d.score);
-  highScores.value = getScores();
-};
+const selectGame = (game) => { state.currentGame = game.component; fx.shoot(); };
+const exitGame = () => { state.currentGame = null; highScores.value = getScores(); };
+const handleSaveScore = (d) => { saveScore(d.gameId, d.score); highScores.value = getScores(); };
 
 const handleGlobalKeys = (e) => {
   const key = e.key;
-
   if (!state.currentGame && !state.isLocked && !state.showPanic && !state.showWindows) {
-    if (key === 'ArrowRight' || key === 'ArrowDown') {
-      state.selectedIndex = (state.selectedIndex + 1) % games.length;
-      fx.shoot();
-    }
-    if (key === 'ArrowLeft' || key === 'ArrowUp') {
-      state.selectedIndex = (state.selectedIndex - 1 + games.length) % games.length;
-      fx.shoot();
-    }
+    if (key === 'ArrowRight' || key === 'ArrowDown') state.selectedIndex = (state.selectedIndex + 1) % games.length;
+    if (key === 'ArrowLeft' || key === 'ArrowUp') state.selectedIndex = (state.selectedIndex - 1 + games.length) % games.length;
     if (key === 'Enter') selectGame(games[state.selectedIndex]);
   }
-
   if (e.altKey && key.toLowerCase() === 'w') state.showWindows = !state.showWindows;
   if (key.toLowerCase() === 'p') state.showPanic = !state.showPanic;
   if (key.toLowerCase() === 'l') { state.isLocked = true; state.currentGame = null; }
-  
-  if (key === 'Escape') {
-    state.showWindows = false;
-    state.showPanic = false;
-    state.isLocked = false;
-    state.currentGame = null;
-  }
+  if (key === 'Escape') { state.showWindows = false; state.showPanic = false; state.isLocked = false; state.currentGame = null; }
 };
 
 onMounted(() => {
   setInterval(() => { currentTime.value = new Date().toLocaleTimeString('pt-BR'); }, 1000);
   window.addEventListener('keydown', handleGlobalKeys);
 });
-
 onUnmounted(() => window.removeEventListener('keydown', handleGlobalKeys));
 </script>
 
@@ -145,75 +116,104 @@ onUnmounted(() => window.removeEventListener('keydown', handleGlobalKeys));
 :root {
   --neon-green: #00ff41;
   --neon-pink: #ff00ff;
-  --bg-black: #050505;
 }
 
-body {
-  margin: 0; background: #000; color: var(--neon-green);
-  font-family: 'Courier New', Courier, monospace; overflow: hidden;
-  user-select: none;
+body, html {
+  margin: 0; padding: 0; height: 100%; width: 100%;
+  background: #000; color: var(--neon-green);
+  font-family: 'Courier New', monospace; overflow: hidden;
 }
 
-.main-wrapper { height: 100vh; width: 100vw; display: flex; flex-direction: column; }
-#console-shell { height: 100%; display: flex; flex-direction: column; }
+.main-wrapper { 
+  height: 100vh; 
+  display: flex; 
+  flex-direction: column; 
+}
+
+#console-shell { 
+  flex: 1; 
+  display: flex; 
+  flex-direction: column; 
+  overflow: hidden;
+}
 
 .console-header { 
-  display: flex; justify-content: space-between; padding: 10px 20px; 
-  background: #111; border-bottom: 2px solid #222; align-items: center; 
+  height: 50px;
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 0 20px; background: #111; border-bottom: 2px solid #222;
 }
 
-.logo h1 { margin: 0; font-size: 1.2rem; letter-spacing: 5px; }
+.logo h1 { font-size: 1rem; letter-spacing: 3px; margin: 0; }
 .logo span { color: var(--neon-pink); }
 
 .screen { 
-  flex-grow: 1; margin: 15px; background: #020502; border: 10px solid #2a2a2a; 
-  border-radius: 8px; position: relative; overflow: hidden; display: flex; flex-direction: column; 
-}
-
-.scanlines { 
-  position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
-  background: linear-gradient(rgba(18,16,16,0) 50%, rgba(0,0,0,0.1) 50%); 
-  background-size: 100% 4px; z-index: 100; pointer-events: none; 
-}
-
-.crt-glow { 
-  position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
-  box-shadow: inset 0 0 50px rgba(0, 255, 65, 0.1); pointer-events: none; 
+  flex: 1; /* Ocupa todo o espaço entre header e footer */
+  margin: 10px;
+  background: #020502; 
+  border: 4px solid #2a2a2a; 
+  border-radius: 8px; 
+  position: relative; 
+  overflow: hidden;
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 
 .menu-grid { 
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); 
-  gap: 20px; padding: 40px; z-index: 10; 
+  display: grid;
+  /* Grid responsiva: ajusta colunas pelo tamanho da tela */
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 15px; 
+  padding: 20px;
+  width: 100%;
+  max-width: 1000px;
+  max-height: 100%;
+  overflow-y: auto; /* Scroll caso a tela seja MUITO pequena */
 }
 
 .game-card { 
-  border: 1px solid var(--neon-green); padding: 20px; text-align: center; 
-  cursor: pointer; background: rgba(0, 255, 65, 0.02); transition: all 0.2s ease; 
+  border: 1px solid var(--neon-green); 
+  padding: 15px; 
+  text-align: center; 
+  background: rgba(0, 255, 65, 0.05);
+  transition: all 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 120px;
 }
 
 .game-card.is-selected {
   background: var(--neon-green);
   color: #000;
-  transform: scale(1.05);
-  box-shadow: 0 0 25px var(--neon-green);
-  border: 2px solid #fff;
+  box-shadow: 0 0 15px var(--neon-green);
+  transform: scale(1.02);
 }
 
-.game-icon { font-size: 2.5rem; margin-bottom: 10px; }
-.game-hint { font-size: 0.6rem; font-weight: bold; margin-top: 10px; animation: blink 0.5s infinite; }
+.game-icon { font-size: 2rem; }
+.game-title { font-weight: bold; font-size: 0.9rem; margin-top: 5px; }
+.game-stats { font-size: 0.7rem; }
 
 .console-footer { 
-  padding: 8px 20px; background: #111; border-top: 2px solid #222; font-size: 0.8rem; 
+  height: 40px;
+  background: #111; border-top: 2px solid #222;
+  display: flex; align-items: center; padding: 0 20px;
+  font-size: 0.7rem;
 }
 
-.footer-content { display: flex; justify-content: space-between; align-items: center; }
+.game-viewport {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
 
-.fade-enter-active, .fade-leave-active { transition: opacity 0.3s ease; }
+/* Scrollbar estilizada para o menu se necessário */
+.menu-grid::-webkit-scrollbar { width: 5px; }
+.menu-grid::-webkit-scrollbar-thumb { background: var(--neon-green); }
+
+.fade-enter-active, .fade-leave-active { transition: opacity 0.2s; }
 .fade-enter-from, .fade-leave-to { opacity: 0; }
-.slide-up-enter-active { transition: all 0.4s ease-out; }
-.slide-up-enter-from { transform: translateY(30px); opacity: 0; }
-.blink { animation: blink 1s infinite; }
-@keyframes blink { 50% { opacity: 0; } }
-
-.game-viewport { width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; background: #000; }
 </style>
