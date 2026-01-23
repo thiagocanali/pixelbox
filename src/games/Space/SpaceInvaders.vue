@@ -1,10 +1,10 @@
 <template>
   <div class="space-container">
-    <div class="hud">SCORE: {{ score }} | LIVES: {{ lives }}</div>
+    <div class="hud">SCORE: {{ score }} | LIVES: {{ lives }} | MOEDAS: {{ coins }}</div>
+    <div v-if="boss" class="boss-health-bar"><div :style="{ width: (boss.hp / boss.maxHp * 100) + '%' }"></div></div>
     <canvas ref="canvas" width="400" height="500"></canvas>
     <div v-if="gameOver" class="overlay">
-      <h2>VOID_INVADED</h2>
-      <p>FINAL SCORE: {{ score }}</p>
+      <h2>{{ lives <= 0 ? 'VOID_INVADED' : 'SYSTEM_SAVED' }}</h2>
       <button @click="reset">REBOOT [ENTER]</button>
     </div>
   </div>
@@ -17,27 +17,23 @@ import { fx } from '../../utils/sounds';
 const canvas = ref(null);
 const score = ref(0);
 const lives = ref(3);
+const coins = ref(0);
 const gameOver = ref(false);
-let ctx, player, bullets = [], enemyBullets = [], enemies = [], requestId;
+const boss = ref(null);
+
+let ctx, player, bullets = [], enemyBullets = [], enemies = [], drops = [], requestId;
 
 const init = () => {
   player = { x: 180, y: 450, w: 30, h: 20 };
-  bullets = [];
-  enemyBullets = [];
-  enemies = [];
-  score.value = 0;
-  lives.value = 3;
-  
-  for(let row=0; row<4; row++) {
-    for(let col=0; col<7; col++) {
-      enemies.push({
-        x: 40 + col * 45,
-        y: 50 + row * 35,
-        w: 25,
-        h: 20,
-        dir: 1,
-        alive: true
-      });
+  enemies = []; bullets = []; enemyBullets = []; drops = []; boss.value = null;
+  score.value = 0; lives.value = 3;
+  spawnWave();
+};
+
+const spawnWave = () => {
+  for(let row=0; row<3; row++) {
+    for(let col=0; col<6; col++) {
+      enemies.push({ x: 50 + col * 50, y: 50 + row * 40, w: 30, h: 25, alive: true, dir: 1 });
     }
   }
 };
@@ -45,64 +41,62 @@ const init = () => {
 const update = () => {
   if (gameOver.value) return;
 
-  // Balas do Jogador (Rápidas)
-  bullets.forEach((b, i) => {
-    b.y -= 8;
-    if (b.y < 0) bullets.splice(i, 1);
-  });
+  // Jogador
+  bullets.forEach((b, i) => { b.y -= 7; if(b.y < 0) bullets.splice(i,1); });
 
-  // Balas dos Inimigos (Mais lentas e em menor quantidade)
+  // Tiros Inimigos
   enemyBullets.forEach((eb, i) => {
-    eb.y += 3.5; // Velocidade reduzida
-    if (eb.y > 500) enemyBullets.splice(i, 1);
-    
-    // Colisão com Jogador
-    if (eb.x < player.x + player.w && eb.x + 4 > player.x &&
-        eb.y < player.y + player.h && eb.y + 10 > player.y) {
-      enemyBullets.splice(i, 1);
-      lives.value--;
-      fx.hit?.() || fx.explode();
+    eb.y += 4;
+    if (eb.x < player.x + player.w && eb.x + 4 > player.x && eb.y < player.y + player.h && eb.y + 10 > player.y) {
+      enemyBullets.splice(i, 1); lives.value--; fx.explode();
       if (lives.value <= 0) gameOver.value = true;
     }
+    if (eb.y > 500) enemyBullets.splice(i, 1);
   });
 
-  let changeDir = false;
-  enemies.forEach(e => {
-    if (!e.alive) return;
-    
-    // Movimento lateral mais calmo
-    e.x += 0.8 * e.dir;
-    if (e.x > 370 || e.x < 10) changeDir = true;
-    
-    // IA DE TIRO EQUILIBRADA: 
-    // Somente se houver menos de 3 balas inimigas na tela
-    if (enemyBullets.length < 3 && Math.random() < 0.005) {
-      enemyBullets.push({ x: e.x + e.w/2, y: e.y + e.h });
+  // Moedas
+  drops.forEach((d, i) => {
+    d.y += 2;
+    if (d.x < player.x + player.w && d.x + 10 > player.x && d.y < player.y + player.h && d.y + 10 > player.y) {
+      drops.splice(i,1); coins.value++; fx.shoot();
     }
   });
 
-  if (changeDir) {
-    enemies.forEach(e => {
-      e.dir *= -1;
-      e.y += 12;
-      if (e.y > 430) gameOver.value = true;
-    });
+  // Boss
+  if (boss.value) {
+    boss.value.x += 2.5 * boss.value.dir;
+    if (boss.value.x > 300 || boss.value.x < 0) boss.value.dir *= -1;
+    if (Math.random() < 0.04) enemyBullets.push({ x: boss.value.x + 50, y: boss.value.y + 60 });
   }
 
-  // Colisão Bala -> Inimigo
-  bullets.forEach((b, bi) => {
-    enemies.forEach((e) => {
-      if (e.alive && b.x < e.x + e.w && b.x + 5 > e.x &&
-          b.y < e.y + e.h && b.y + 10 > e.y) {
-        e.alive = false;
-        bullets.splice(bi, 1);
-        score.value += 100;
-        fx.shoot();
-      }
-    });
+  // Inimigos Normais
+  let moveDown = false;
+  enemies.forEach(e => {
+    if (!e.alive) return;
+    e.x += 1.5 * e.dir;
+    if (e.x > 370 || e.x < 10) moveDown = true;
+    if (Math.random() < 0.005 && enemyBullets.length < 4) enemyBullets.push({ x: e.x + 15, y: e.y + 25 });
   });
 
-  if (enemies.every(e => !e.alive)) init();
+  if (moveDown) {
+    enemies.forEach(e => { e.dir *= -1; e.y += 10; });
+  }
+
+  // Colisões
+  bullets.forEach((b, bi) => {
+    enemies.forEach(e => {
+      if (e.alive && b.x < e.x + e.w && b.x + 5 > e.x && b.y < e.y + e.h && b.y + 5 > e.y) {
+        e.alive = false; bullets.splice(bi, 1); score.value += 100;
+        if (Math.random() > 0.6) drops.push({ x: e.x, y: e.y });
+      }
+    });
+    if (boss.value && b.x < boss.value.x + boss.value.w && b.x + 5 > boss.value.x && b.y < boss.value.y + boss.value.h) {
+      boss.value.hp--; bullets.splice(bi, 1);
+      if (boss.value.hp <= 0) { boss.value = null; score.value += 5000; coins.value += 50; }
+    }
+  });
+
+  if (enemies.every(e => !e.alive) && !boss.value) boss.value = { x: 150, y: 50, w: 100, h: 60, hp: 40, maxHp: 40, dir: 1 };
 
   draw();
   requestId = requestAnimationFrame(update);
@@ -110,67 +104,28 @@ const update = () => {
 
 const draw = () => {
   ctx.fillStyle = '#000'; ctx.fillRect(0,0,400,500);
-  
-  // Player
-  ctx.fillStyle = '#00ff41';
-  ctx.fillRect(player.x, player.y, player.w, player.h);
-  ctx.fillRect(player.x + 12, player.y - 5, 6, 5);
+  ctx.fillStyle = '#00ff41'; ctx.fillRect(player.x, player.y, player.w, player.h);
+  ctx.fillStyle = '#fff'; bullets.forEach(b => ctx.fillRect(b.x, b.y, 3, 10));
+  ctx.fillStyle = '#ff4444'; enemyBullets.forEach(eb => ctx.fillRect(eb.x, eb.y, 3, 10));
+  ctx.fillStyle = '#ffd700'; drops.forEach(d => { ctx.beginPath(); ctx.arc(d.x, d.y, 6, 0, 7); ctx.fill(); });
 
-  // Balas Player
-  ctx.fillStyle = '#fff';
-  bullets.forEach(b => ctx.fillRect(b.x, b.y, 2, 10));
-  
-  // Balas Inimigas (Vermelho neon)
-  ctx.fillStyle = '#ff4444';
-  enemyBullets.forEach(eb => ctx.fillRect(eb.x, eb.y, 3, 12));
-
-  // Inimigos
-  enemies.forEach(e => {
-    if (e.alive) {
-      ctx.fillStyle = '#ff00ff';
-      ctx.fillRect(e.x, e.y, e.w, e.h);
-      ctx.fillStyle = '#000';
-      ctx.fillRect(e.x + 5, e.y + 5, 3, 3);
-      ctx.fillRect(e.x + 17, e.y + 5, 3, 3);
-    }
-  });
-};
-
-const handleKeys = (e) => {
-  if (gameOver.value && e.key === 'Enter') { reset(); return; }
-  if (e.key === 'ArrowLeft' && player.x > 0) player.x -= 15;
-  if (e.key === 'ArrowRight' && player.x < 370) player.x += 15;
-  if (e.key === ' ' || e.key === 'ArrowUp') {
-    if (bullets.length < 2) { // Player pode ter 2 tiros por vez
-      bullets.push({ x: player.x + player.w/2 - 1, y: player.y });
-      fx.shoot();
-    }
+  enemies.forEach(e => { if(e.alive) { ctx.fillStyle = '#ff00ff'; ctx.fillRect(e.x, e.y, e.w, e.h); }});
+  if (boss.value) {
+    ctx.fillStyle = '#ff0000'; ctx.fillRect(boss.value.x, boss.value.y, boss.value.w, boss.value.h);
+    ctx.fillStyle = '#fff'; ctx.fillRect(boss.value.x+20, boss.value.y+15, 10, 10); ctx.fillRect(boss.value.x+70, boss.value.y+15, 10, 10);
   }
 };
 
-const reset = () => {
-  cancelAnimationFrame(requestId);
-  init();
-  gameOver.value = false;
-  update();
+const handleKeys = (e) => {
+  if (e.key === 'ArrowLeft' && player.x > 0) player.x -= 20;
+  if (e.key === 'ArrowRight' && player.x < 370) player.x += 20;
+  if (e.key === ' ' || e.key === 'ArrowUp') {
+    if (bullets.length < 3) { bullets.push({ x: player.x + 13, y: player.y }); fx.shoot(); }
+  }
+  if (gameOver.value && e.key === 'Enter') reset();
 };
 
-onMounted(() => {
-  ctx = canvas.value.getContext('2d');
-  window.addEventListener('keydown', handleKeys);
-  init(); update();
-});
-
-onUnmounted(() => {
-  window.removeEventListener('keydown', handleKeys);
-  cancelAnimationFrame(requestId);
-});
+const reset = () => { cancelAnimationFrame(requestId); init(); gameOver.value = false; update(); };
+onMounted(() => { ctx = canvas.value.getContext('2d'); window.addEventListener('keydown', handleKeys); init(); update(); });
+onUnmounted(() => { window.removeEventListener('keydown', handleKeys); cancelAnimationFrame(requestId); });
 </script>
-
-<style scoped>
-.space-container { background: #000; height: 100%; display: flex; flex-direction: column; align-items: center; position: relative; }
-.hud { color: #00ff41; padding: 10px; font-family: monospace; font-size: 1rem; }
-canvas { border: 2px solid #333; }
-.overlay { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.95); padding: 30px; border: 2px solid #ff00ff; text-align: center; color: #fff; }
-button { background: #111; border: 1px solid #00ff41; color: #00ff41; padding: 10px 20px; cursor: pointer; font-family: inherit; margin-top: 15px; }
-</style>

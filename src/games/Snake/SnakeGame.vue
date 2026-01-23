@@ -1,114 +1,149 @@
 <template>
-  <div class="game-container">
-    <div class="hud">
-      <span>SCORE: {{ score }}</span>
-      <button @click="$emit('exit')">SAIR</button>
-    </div>
+  <div class="snake-container">
+    <div class="hud">SCORE: {{ score }} | BITCOINS: {{ coins }}</div>
     <canvas ref="canvas" width="400" height="400"></canvas>
     <div v-if="gameOver" class="overlay">
-      <h2>GAME OVER</h2>
-      <button @click="resetGame">RECOMEÇAR</button>
+      <h2>SEGMENT_FAULT</h2>
+      <button @click="reset">REBOOT [ENTER]</button>
     </div>
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue';
+import { fx } from '../../utils/sounds';
 
 const canvas = ref(null);
 const score = ref(0);
+const coins = ref(0);
 const gameOver = ref(false);
-let ctx, interval;
+let ctx, requestId, lastTime = 0;
 
-const snake = ref([{ x: 10, y: 10 }]);
-const food = ref({ x: 5, y: 5 });
-const direction = ref({ x: 0, y: 0 });
 const gridSize = 20;
+const tileCount = 20;
 
-const resetGame = () => {
-  snake.value = [{ x: 10, y: 10 }];
-  direction.value = { x: 1, y: 0 };
+let snake = [{ x: 10, y: 10 }];
+let food = { x: 5, y: 5 };
+let coin = { x: -1, y: -1 };
+let direction = { x: 0, y: 0 };
+let nextDirection = { x: 0, y: 0 };
+let gameSpeed = 120; // Velocidade inicial estável
+
+const init = () => {
+  snake = [{ x: 10, y: 10 }];
+  direction = { x: 0, y: 0 };
+  nextDirection = { x: 0, y: 0 };
   score.value = 0;
   gameOver.value = false;
   spawnFood();
 };
 
 const spawnFood = () => {
-  food.value = {
-    x: Math.floor(Math.random() * (400 / gridSize)),
-    y: Math.floor(Math.random() * (400 / gridSize))
+  food = { 
+    x: Math.floor(Math.random() * tileCount), 
+    y: Math.floor(Math.random() * tileCount) 
   };
+  // Spawn raro de moeda
+  if (Math.random() > 0.8) {
+    coin = { x: Math.floor(Math.random() * tileCount), y: Math.floor(Math.random() * tileCount) };
+  }
 };
 
-const update = () => {
+const update = (time) => {
   if (gameOver.value) return;
 
-  const head = { x: snake.value[0].x + direction.value.x, y: snake.value[0].y + direction.value.y };
+  if (time - lastTime > gameSpeed) {
+    direction = nextDirection;
+    const head = { x: snake[0].x + direction.x, y: snake[0].y + direction.y };
 
-  // Colisão com paredes ou corpo
-  if (head.x < 0 || head.x >= 20 || head.y < 0 || head.y >= 20 || 
-      snake.value.some(s => s.x === head.x && s.y === head.y)) {
-    gameOver.value = true;
-    return;
-  }
+    // PAREDES INFINITAS (PORTAL)
+    if (head.x < 0) head.x = tileCount - 1;
+    if (head.x >= tileCount) head.x = 0;
+    if (head.y < 0) head.y = tileCount - 1;
+    if (head.y >= tileCount) head.y = 0;
 
-  snake.value.unshift(head);
+    // Colisão com o corpo (apenas se estiver movendo)
+    if ((direction.x !== 0 || direction.y !== 0) && 
+        snake.some(s => s.x === head.x && s.y === head.y)) {
+      gameOver.value = true;
+      fx.explode();
+      return;
+    }
 
-  if (head.x === food.value.x && head.y === food.value.y) {
-    score.value += 10;
-    spawnFood();
-  } else {
-    snake.value.pop();
+    snake.unshift(head);
+
+    // Comer comida
+    if (head.x === food.x && head.y === food.y) {
+      score.value += 10;
+      fx.shoot();
+      spawnFood();
+      if (gameSpeed > 60) gameSpeed -= 1; // Aumenta velocidade sutilmente
+    } else if (head.x === coin.x && head.y === coin.y) {
+      coins.value++;
+      fx.shoot();
+      coin = { x: -1, y: -1 };
+    } else {
+      snake.pop();
+    }
+    lastTime = time;
   }
 
   draw();
+  requestId = requestAnimationFrame(update);
 };
 
 const draw = () => {
   ctx.fillStyle = '#000';
   ctx.fillRect(0, 0, 400, 400);
 
-  ctx.fillStyle = '#ff00ff'; // Comidinha neon
-  ctx.fillRect(food.value.x * gridSize, food.value.y * gridSize, gridSize - 2, gridSize - 2);
+  // Comida Neon Pink
+  ctx.fillStyle = '#ff00ff';
+  ctx.fillRect(food.x * gridSize + 2, food.y * gridSize + 2, gridSize - 4, gridSize - 4);
 
-  ctx.fillStyle = '#00ff00'; // Cobra neon
-  snake.value.forEach(s => {
-    ctx.fillRect(s.x * gridSize, s.y * gridSize, gridSize - 2, gridSize - 2);
+  // Moeda Gold
+  if (coin.x !== -1) {
+    ctx.fillStyle = '#ffd700';
+    ctx.beginPath();
+    ctx.arc(coin.x * gridSize + 10, coin.y * gridSize + 10, 6, 0, 7);
+    ctx.fill();
+  }
+
+  // Cobra Neon Green
+  snake.forEach((s, i) => {
+    ctx.fillStyle = i === 0 ? '#fff' : '#00ff41';
+    ctx.fillRect(s.x * gridSize + 1, s.y * gridSize + 1, gridSize - 2, gridSize - 2);
   });
 };
 
-const handleKey = (e) => {
-  const keys = {
-    ArrowUp: { x: 0, y: -1 }, ArrowDown: { x: 0, y: 1 },
-    ArrowLeft: { x: -1, y: 0 }, ArrowRight: { x: 1, y: 0 }
-  };
-  if (keys[e.key]) {
-    // Evita inverter a direção diretamente
-    const newDir = keys[e.key];
-    if (newDir.x !== -direction.value.x && newDir.y !== -direction.value.y) {
-      direction.value = newDir;
-    }
-  }
+const handleKeys = (e) => {
+  if (gameOver.value && e.key === 'Enter') { reset(); return; }
+  
+  const key = e.key;
+  if (key === 'ArrowUp' && direction.y === 0) nextDirection = { x: 0, y: -1 };
+  if (key === 'ArrowDown' && direction.y === 0) nextDirection = { x: 0, y: 1 };
+  if (key === 'ArrowLeft' && direction.x === 0) nextDirection = { x: -1, y: 0 };
+  if (key === 'ArrowRight' && direction.x === 0) nextDirection = { x: 1, y: 0 };
 };
+
+const reset = () => { init(); };
 
 onMounted(() => {
   ctx = canvas.value.getContext('2d');
-  window.addEventListener('keydown', handleKey);
-  resetGame();
-  interval = setInterval(update, 100);
+  window.addEventListener('keydown', handleKeys);
+  init();
+  update(0);
 });
 
 onUnmounted(() => {
-  window.removeEventListener('keydown', handleKey);
-  clearInterval(interval);
+  window.removeEventListener('keydown', handleKeys);
+  cancelAnimationFrame(requestId);
 });
 </script>
 
 <style scoped>
-.game-container { position: relative; display: flex; flex-direction: column; align-items: center; background: #111; height: 100%; }
-.hud { width: 100%; display: flex; justify-content: space-between; padding: 10px; color: #00ff00; }
-canvas { border: 2px solid #333; background: #000; }
-.overlay { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.8); padding: 20px; text-align: center; border: 2px solid #ff00ff; }
-button { background: transparent; border: 1px solid #00ff00; color: #00ff00; cursor: pointer; padding: 5px 10px; }
-button:hover { background: #00ff00; color: #000; }
+.snake-container { background: #000; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.hud { color: #00ff41; font-family: monospace; font-size: 1.2rem; margin-bottom: 10px; }
+canvas { border: 2px solid #333; box-shadow: 0 0 20px rgba(0, 255, 65, 0.2); }
+.overlay { position: absolute; background: rgba(0,0,0,0.9); padding: 30px; border: 2px solid #ff00ff; text-align: center; color: white; }
+button { background: none; border: 1px solid #00ff41; color: #00ff41; padding: 10px 20px; cursor: pointer; margin-top: 15px; }
 </style>
