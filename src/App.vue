@@ -74,6 +74,7 @@ import CyberJump from './games/Jump/CyberJump.vue';
 import BreakoutGame from './games/Breakout/BreakoutGame.vue';
 import CyberCombat from './games/Combat/CyberCombat.vue';
 import NeonPinball from './games/Pinball/NeonPinball.vue';
+import TermoGame from './games/Termo/TermoGame.vue';
 
 const currentTime = ref('');
 const highScores = ref(getScores());
@@ -94,7 +95,8 @@ const games = [
   { id: 'work', name: 'HACKER', icon: '👨‍💻', component: markRaw(WorkQuest) },
   { id: 'breakout', name: 'BRICKS', icon: '🧱', component: markRaw(BreakoutGame) },
   { id: 'combat', name: 'COMBAT', icon: '🥊', component: markRaw(CyberCombat) },
-  { id: 'pinball', name: 'PINBALL', icon: '🎱', component: markRaw(NeonPinball) }
+  { id: 'pinball', name: 'PINBALL', icon: '🎱', component: markRaw(NeonPinball) },
+  { id: 'termo', name: 'TERMO', icon: '📝', component: markRaw(TermoGame) }
 ];
 
 const selectGame = (game) => { state.currentGame = game.component; fx.shoot(); };
